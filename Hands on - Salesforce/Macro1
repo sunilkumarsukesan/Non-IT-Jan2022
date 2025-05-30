@@ -1,0 +1,116 @@
+Sub UploadAndAttachFileToTestCase()
+
+    ' 🔧 Configuration
+    Dim organization As String: organization = "your_org"
+    Dim project As String: project = "your_project"
+    Dim pat As String: pat = "your_pat"
+    Dim testCaseId As String: testCaseId = "12345"
+    Dim filePath As String: filePath = "C:\Path\To\yourfile.txt"
+    Dim fileName As String: fileName = "yourfile.txt"
+
+    Dim uploadUrl As String
+    uploadUrl = "https://dev.azure.com/" & organization & "/" & project & "/_apis/wit/attachments?fileName=" & fileName & "&api-version=7.1-preview.3"
+
+    ' 🔐 Encode PAT
+    Dim authHeader As String
+    authHeader = "Basic " & Base64Encode(":" & pat)
+
+    ' 📤 Step 1: Upload file
+    Dim uploadReq As Object
+    Set uploadReq = CreateObject("MSXML2.XMLHTTP")
+    
+    uploadReq.Open "POST", uploadUrl, False
+    uploadReq.setRequestHeader "Content-Type", "application/octet-stream"
+    uploadReq.setRequestHeader "Authorization", authHeader
+    uploadReq.send ReadBinaryFile(filePath)
+    
+    If uploadReq.Status <> 200 Then
+        MsgBox "Upload failed: " & uploadReq.Status & " - " & uploadReq.responseText
+        Exit Sub
+    End If
+
+    Dim responseText As String: responseText = uploadReq.responseText
+    Dim attachmentUrl As String: attachmentUrl = ExtractValueFromJson(responseText, "url")
+
+    ' 🧩 Step 2: PATCH to link to test case
+    Dim patchUrl As String
+    patchUrl = "https://dev.azure.com/" & organization & "/" & project & "/_apis/wit/workitems/" & testCaseId & "?api-version=7.1-preview.3"
+    
+    Dim patchJson As String
+    patchJson = "[" & _
+        "{" & _
+        """op"":""add""," & _
+        """path"":""/relations/-""," & _
+        """value"":{" & _
+        """rel"":""AttachedFile""," & _
+        """url"":""" & attachmentUrl & """," & _
+        """attributes"":{""comment"":""Uploaded via macro""}" & _
+        "}" & _
+        "}" & _
+        "]"
+    
+    Dim patchReq As Object
+    Set patchReq = CreateObject("MSXML2.XMLHTTP")
+    patchReq.Open "PATCH", patchUrl, False
+    patchReq.setRequestHeader "Content-Type", "application/json-patch+json"
+    patchReq.setRequestHeader "Authorization", authHeader
+    patchReq.send patchJson
+
+    If patchReq.Status = 200 Or patchReq.Status = 201 Then
+        MsgBox "File uploaded and attached successfully."
+    Else
+        MsgBox "Patch failed: " & patchReq.Status & " - " & patchReq.responseText
+    End If
+
+End Sub
+
+' 📄 Read binary file
+Function ReadBinaryFile(filePath As String) As Variant
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    Dim fileContent() As Byte
+
+    Open filePath For Binary Access Read As #fileNum
+    ReDim fileContent(0 To LOF(fileNum) - 1)
+    Get #fileNum, , fileContent
+    Close #fileNum
+
+    ReadBinaryFile = fileContent
+End Function
+
+' 🔐 Base64 encode
+Function Base64Encode(text As String) As String
+    Dim arrData() As Byte
+    arrData = StrConv(text, vbFromUnicode)
+    
+    Dim objXML As Object, objNode As Object
+    Set objXML = CreateObject("MSXML2.DOMDocument.6.0")
+    Set objNode = objXML.createElement("b64")
+    objNode.DataType = "bin.base64"
+    objNode.nodeTypedValue = arrData
+    Base64Encode = Replace(objNode.Text, vbLf, "")
+    
+    Set objNode = Nothing
+    Set objXML = Nothing
+End Function
+
+' 🔎 Simple JSON value extractor
+Function ExtractValueFromJson(json As String, key As String) As String
+    Dim pattern As String
+    pattern = """" & key & """:\s*""([^""]+)"""
+    
+    Dim regEx As Object
+    Set regEx = CreateObject("VBScript.RegExp")
+    regEx.Pattern = pattern
+    regEx.IgnoreCase = True
+    regEx.Global = False
+    
+    Dim matches As Object
+    Set matches = regEx.Execute(json)
+    
+    If matches.Count > 0 Then
+        ExtractValueFromJson = matches(0).SubMatches(0)
+    Else
+        ExtractValueFromJson = ""
+    End If
+End Function
