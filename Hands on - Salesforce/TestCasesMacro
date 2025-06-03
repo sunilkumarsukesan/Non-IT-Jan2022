@@ -1,0 +1,118 @@
+Sub GenerateTestCasesUsingLLM()
+    Dim wsInput As Worksheet, wsOutput As Worksheet
+    Dim userStory As String, acceptanceCriteria As String, instructions As String
+    Dim prompt As String, apiKey As String, model As String
+    Dim jsonRequest As String, jsonResponse As String
+    Dim http As Object, json As Object, testCase As Object
+    Dim i As Long
+
+    ' Set your sheets
+    Set wsInput = ThisWorkbook.Sheets("Input")
+    Set wsOutput = ThisWorkbook.Sheets("TestCases")
+    
+    ' Clear previous output
+    wsOutput.Cells.Clear
+    
+        ' API details (replace these with your actual values)
+    apiKey = "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"
+    model = "llama-3.3-70b-versatile"
+    
+    ' Get values
+    userStory = wsInput.Range("B1").Value
+    acceptanceCriteria = wsInput.Range("B2").Value
+    instructions = wsInput.Range("B3").Value
+    
+prompt = "You are a QA expert. Based on the following details:" & vbCrLf & _
+         "User Story: " & CleanForJSON(userStory) & vbCrLf & _
+         "Acceptance Criteria: " & CleanForJSON(acceptanceCriteria) & vbCrLf & _
+         "Additional Instructions: " & CleanForJSON(instructions) & vbCrLf & _
+         "Generate detailed manual test cases in JSON format like:" & vbCrLf & _
+         "[{""Title"":""..."", ""Steps"":[""Step1"",""Step2""], ""ExpectedResult"":""...""}]"
+
+' Escape final prompt again just in case
+safePrompt = CleanForJSON(prompt)
+
+' Build the JSON request
+jsonRequest = "{""model"":""" & model & """, ""messages"":[{""role"":""user"", ""content"":""" & safePrompt & """}], ""temperature"":0.3}"
+
+    
+
+    
+    
+    Range("C7").Value = jsonRequest
+
+    ' Initialize HTTP request
+    Set http = CreateObject("MSXML2.XMLHTTP")
+    http.Open "POST", "https://api.groq.com/openai/v1/chat/completions", False
+    http.setRequestHeader "Content-Type", "application/json"
+    http.setRequestHeader "Authorization", "Bearer " & apiKey
+    http.Send jsonRequest
+    
+    If http.Status <> 200 Then
+        MsgBox "Error: " & http.Status & vbCrLf & http.responseText
+        Exit Sub
+    End If
+    
+    jsonResponse = http.responseText
+    
+    Range("C10").Value = jsonResponse
+    
+    ' Parse the main JSON response
+    Set jsonParsed = JsonConverter.ParseJson(jsonResponse)
+    
+    ' Extract the content string inside choices[0].message.content
+    contentJsonString = jsonParsed("choices")(1)("message")("content")
+    
+    Dim jsonStart As Long, jsonEnd As Long
+    jsonStart = InStr(contentJsonString, "```json") + Len("```json")
+    jsonEnd = InStr(jsonStart, contentJsonString, "```")
+    
+    Dim manualTestCasesJson As String
+    manualTestCasesJson = Mid(contentJsonString, jsonStart, jsonEnd - jsonStart)
+    manualTestCasesJson = Trim(manualTestCasesJson) ' clean up whitespace
+    
+        
+    Range("C11").Value = manualTestCasesJson
+
+
+' Now parse the clean JSON array
+Dim testCases As Collection
+Set testCases = JsonConverter.ParseJson(manualTestCasesJson)
+    
+    ' Write headers
+    wsOutput.Cells(1, 1).Value = "Title"
+    wsOutput.Cells(1, 2).Value = "Steps"
+    wsOutput.Cells(1, 3).Value = "Expected Result"
+    
+    ' Write test cases
+    i = 2
+    Dim stepItem As Variant
+    For Each testCase In testCases
+        wsOutput.Cells(i, 1).Value = testCase("Title")
+        
+        ' Join Steps array into one text block with line breaks
+        stepText = ""
+        For Each stepItem In testCase("Steps")
+            stepText = stepText & stepItem & vbNewLine
+        Next stepItem
+        
+        ' Remove last line break
+        If Len(stepText) > 0 Then stepText = Left(stepText, Len(stepText) - 1)
+        
+        wsOutput.Cells(i, 2).Value = stepText
+        wsOutput.Cells(i, 3).Value = testCase("ExpectedResult")
+        i = i + 1
+    Next testCase
+    
+    MsgBox "Test cases generated successfully!"
+End Sub
+
+Function CleanForJSON(text As String) As String
+    text = Replace(text, "\", "\\")          ' Escape backslashes
+    text = Replace(text, """", "\""")        ' Escape quotes
+    text = Replace(text, vbCrLf, "\n")       ' Normalize newlines
+    text = Replace(text, vbCr, "\n")
+    text = Replace(text, vbLf, "\n")
+    text = Replace(text, vbTab, " ")         ' Replace tabs with space
+    CleanForJSON = text
+End Function
