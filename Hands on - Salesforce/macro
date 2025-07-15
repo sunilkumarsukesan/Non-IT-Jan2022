@@ -101,3 +101,42 @@ describe('Web Form Validation Tests', () => {
     }
   });
 });
+
+
+type FieldLocator = {
+  name: string;
+  inputLocator: string;
+  errorLocator: string;
+  expectedErrorRequired: string;
+};
+
+export class FormFieldUtils {
+  private fields: FieldLocator[];
+
+  constructor(fields: FieldLocator[]) {
+    this.fields = fields;
+  }
+
+  getFieldDataByName(fieldName: string): FieldLocator {
+    const field = this.fields.find(f => f.name === fieldName);
+    if (!field) throw new Error(`Field "${fieldName}" not found`);
+    return field;
+  }
+
+  getInputLocator(fieldName: string): string {
+    return this.getFieldDataByName(fieldName).inputLocator;
+  }
+
+  getErrorLocator(fieldName: string): string {
+    return this.getFieldDataByName(fieldName).errorLocator;
+  }
+
+  getExpectedError(fieldName: string): string {
+    return this.getFieldDataByName(fieldName).expectedErrorRequired;
+  }
+
+  getAllFields(): FieldLocator[] {
+    return this.fields;
+  }
+}
+
