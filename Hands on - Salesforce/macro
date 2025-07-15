@@ -1,133 +1,103 @@
-Great! Based on your sheet layout:
+// locators/webFormLocators.ts
+export const webFormLocators = {
+  fields: [
+    {
+      name: 'First Name',
+      inputLocator: '#firstName',
+      errorLocator: '#firstNameError',
+      validValue: 'John',
+      invalidValue: '', // for required
+      expectedErrorRequired: 'First Name is required',
+      expectedErrorInvalid: 'First Name must be a string', // if applicable
+    },
+    {
+      name: 'Age',
+      inputLocator: '#age',
+      errorLocator: '#ageError',
+      validValue: '25',
+      invalidValue: 'abc',
+      expectedErrorRequired: 'Age is required',
+      expectedErrorInvalid: 'Age must be a number',
+    },
+    // add other fields similarly...
+  ]
+};
 
-```
-Title, Prerequisites, Steps (in XML), AreaPath, IterationPath, State, Reason, Work Item, AssignedTo
-```
 
-Here’s a tailored **Excel VBA macro** that:
+// pages/webFormPage.ts
+import { webFormLocators } from '../locators/webFormLocators';
 
-* Reads each row (starting from row 2)
-* Creates a **work item** (Test Case) in **Azure DevOps**
-* Supports fields: `Title`, `Prerequisites`, `Steps` (already in XML), `AreaPath`, `IterationPath`, `State`, `Reason`, `AssignedTo`
+export class WebFormPage {
+  async open() {
+    await browser.url('/webform'); // adjust route
+  }
 
----
+  async submitForm() {
+    await $('#submitBtn').click(); // update if different
+  }
 
-### ✅ Final Excel Macro (Row-wise Test Case Creation)
+  async fillField(locator: string, value: string) {
+    const element = await $(locator);
+    await element.setValue('');
+    await element.setValue(value);
+  }
 
-```vba
-Sub CreateAzureTestCasesFromSheet()
-    Dim http As Object
-    Dim base64Auth As String
-    Dim jsonBody As String
-    Dim url As String
-    Dim lastRow As Long, i As Long
-    
-    ' ==== CONFIG ====
-    Dim organization As String: organization = "your-org"
-    Dim project As String: project = "your-project"
-    Dim patToken As String: patToken = "your_pat_here"
-    ' ================
-    
-    base64Auth = "Basic " & Base64Encode(":" & patToken)
-    
-    lastRow = Sheet1.Cells(Sheet1.Rows.Count, "A").End(xlUp).Row
+  async getError(locator: string): Promise<string> {
+    const errorEl = await $(locator);
+    return errorEl.getText();
+  }
+}
 
-    For i = 2 To lastRow
-        Dim title As String, preReq As String, stepsXml As String
-        Dim areaPath As String, iterationPath As String
-        Dim state As String, reason As String, assignedTo As String
-        Dim workItemType As String
-        
-        title = Sheet1.Cells(i, 1).Value
-        preReq = Sheet1.Cells(i, 2).Value
-        stepsXml = Sheet1.Cells(i, 3).Value
-        areaPath = Sheet1.Cells(i, 4).Value
-        iterationPath = Sheet1.Cells(i, 5).Value
-        state = Sheet1.Cells(i, 6).Value
-        reason = Sheet1.Cells(i, 7).Value
-        workItemType = Sheet1.Cells(i, 8).Value
-        assignedTo = Sheet1.Cells(i, 9).Value
-        
-        ' Build request URL
-        url = "https://dev.azure.com/" & organization & "/" & project & "/_apis/wit/workitems/$" & Replace(workItemType, " ", "%20") & "?api-version=7.1-preview.3"
 
-        ' Build JSON body
-        jsonBody = "["
-        jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/System.Title"",""value"":""" & title & """},"
-        If preReq <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/Microsoft.VSTS.TCM.Preconditions"",""value"":""" & EscapeJson(preReq) & """},"
-        If stepsXml <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/Microsoft.VSTS.TCM.Steps"",""value"":""" & EscapeJson(stepsXml) & """},"
-        If areaPath <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/System.AreaPath"",""value"":""" & areaPath & """},"
-        If iterationPath <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/System.IterationPath"",""value"":""" & iterationPath & """},"
-        If state <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/System.State"",""value"":""" & state & """},"
-        If reason <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/System.Reason"",""value"":""" & reason & """},"
-        If assignedTo <> "" Then jsonBody = jsonBody & "{""op"":""add"",""path"":""/fields/System.AssignedTo"",""value"":""" & assignedTo & """},"
-        jsonBody = Left(jsonBody, Len(jsonBody) - 1) ' Remove trailing comma
-        jsonBody = jsonBody & "]"
-        
-        ' Make HTTP request
-        Set http = CreateObject("MSXML2.XMLHTTP")
-        http.Open "POST", url, False
-        http.setRequestHeader "Content-Type", "application/json-patch+json"
-        http.setRequestHeader "Authorization", base64Auth
-        http.send jsonBody
+// specs/formValidation.spec.ts
+import { expect } from 'chai';
+import { WebFormPage } from '../pages/webFormPage';
+import { webFormLocators } from '../locators/webFormLocators';
 
-        ' Log result
-        If http.Status = 200 Or http.Status = 201 Then
-            Sheet1.Cells(i, 10).Value = "Success"
-        Else
-            Sheet1.Cells(i, 10).Value = "Error " & http.Status
-            Sheet1.Cells(i, 11).Value = http.responseText
-        End If
-    Next i
-    MsgBox "Execution completed!"
-End Sub
+describe('Web Form Validation Tests', () => {
+  const formPage = new WebFormPage();
 
-Function Base64Encode(text As String) As String
-    Dim arrData() As Byte
-    arrData = StrConv(text, vbFromUnicode)
-    Dim objXML As Object, objNode As Object
-    Set objXML = CreateObject("MSXML2.DOMDocument")
-    Set objNode = objXML.createElement("b64")
-    objNode.DataType = "bin.base64"
-    objNode.nodeTypedValue = arrData
-    Base64Encode = Replace(objNode.text, vbLf, "")
-End Function
+  it('should validate all error messages dynamically', async () => {
+    await formPage.open();
 
-Function EscapeJson(str As String) As String
-    str = Replace(str, "\", "\\")
-    str = Replace(str, """", "\""")
-    str = Replace(str, vbCrLf, "\n")
-    str = Replace(str, vbLf, "\n")
-    str = Replace(str, vbCr, "\n")
-    EscapeJson = str
-End Function
-```
+    // Step 1: Submit empty form
+    await formPage.submitForm();
 
----
+    for (const field of webFormLocators.fields) {
+      const actualError = await formPage.getError(field.errorLocator);
+      expect(actualError).to.equal(field.expectedErrorRequired, `Expected required error for ${field.name}`);
+    }
 
-### 📄 Sheet Output Columns (add these):
+    // Step 2 & 3: Iterate each field to test valid and invalid cases
+    for (let i = 0; i < webFormLocators.fields.length; i++) {
+      const currentField = webFormLocators.fields[i];
 
-| J      | K            |
-| ------ | ------------ |
-| Status | ResponseText |
+      // Fill current field with valid input
+      await formPage.fillField(currentField.inputLocator, currentField.validValue);
+      await formPage.submitForm();
 
----
+      // Assert error message gone for this field
+      const error = await formPage.getError(currentField.errorLocator);
+      expect(error).to.be.empty;
 
-### 📌 Notes
+      // Assert others still show required error
+      for (let j = 0; j < webFormLocators.fields.length; j++) {
+        if (j !== i) {
+          const field = webFormLocators.fields[j];
+          const error = await formPage.getError(field.errorLocator);
+          expect(error).to.equal(field.expectedErrorRequired, `Expected required error for ${field.name}`);
+        }
+      }
 
-* `Steps (in XML)` must follow ADO’s expected XML format like:
+      // Step 4: Test invalid input for that field (if any)
+      if (currentField.invalidValue && currentField.expectedErrorInvalid) {
+        await formPage.fillField(currentField.inputLocator, currentField.invalidValue);
+        await formPage.submitForm();
+        const invalidError = await formPage.getError(currentField.errorLocator);
+        expect(invalidError).to.equal(currentField.expectedErrorInvalid, `Expected invalid input error for ${currentField.name}`);
+      }
 
-  ```xml
-  <steps id="0" last="1">
-    <step id="1" type="ActionStep">
-      <parameterizedString isformatted="true">Click Login</parameterizedString>
-      <parameterizedString isformatted="true">Dashboard shown</parameterizedString>
-    </step>
-  </steps>
-  ```
-* Ensure your PAT has **Work Item (read & write)** access.
-* You can change `Sheet1` to `ActiveSheet` if needed.
-
----
-
-Would you like a downloadable `.xlsm` version with this macro embedded?
+      // Optional: Clear field again if needed or reload page
+    }
+  });
+});
