@@ -6,4 +6,4 @@ name="loginfmt"
 id="passwordEntry"
 //button[text()='Next']
 
-//button[text()='No']![Uploading image.png…]()
+//button[text()='No']
