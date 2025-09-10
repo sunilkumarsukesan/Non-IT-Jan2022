@@ -4,7 +4,11 @@ javascript:(function(){window._aicaptured=[];window._aiClickHandler=function(e){
 javascript:(function(){document.removeEventListener('click', window._aiClickHandler, true);alert("🛑 AI Inspect OFF.");})();
 
 javascript:(function(){if(!window._aicaptured||window._aicaptured.length===0){alert("⚠%EF%B8%8F No elements captured.");return}const t=JSON.stringify(window._aicaptured,null,2);console.log("✅ Copied captured elements:",t);navigator.clipboard.writeText(t).then(()=>{alert("📋 Copied to clipboard. Paste it in AI XL Monster!")});})();
-import fs from 'fs';
+
+
+
+import * as fs from 'fs';
+import * as os from 'os';
 
 export const config: WebdriverIO.Config = {
   // ... your existing config ...
@@ -17,17 +21,57 @@ export const config: WebdriverIO.Config = {
     }]
   ],
 
-  onPrepare: function (config, capabilities) {
-    const envDetails =
-      `Environment=QA\n` +
-      `Browser=${capabilities[0].browserName}\n` +
-      `Platform=${process.platform}\n` +
-      `Node.Version=${process.version}\n`;
-
+  onPrepare: function () {
+    // ✅ Create allure-results folder if missing
     if (!fs.existsSync('./allure-results')) {
       fs.mkdirSync('./allure-results');
     }
 
+    // =============================
+    // 🔹 ENVIRONMENT.PROPERTIES
+    // =============================
+    const envDetails =
+      `Environment=${process.env.ENV || 'QA'}\n` +
+      `Browser=${(config.capabilities as any)[0]?.browserName || 'chrome'}\n` +
+      `Browser.Version=${(config.capabilities as any)[0]?.browserVersion || 'latest'}\n` +
+      `SystemID=${os.hostname()}\n` +
+      `UserID=${os.userInfo().username}\n` +
+      `Platform=${os.type()} ${os.release()}\n` +
+      `Node.Version=${process.version}\n`;
+
     fs.writeFileSync('./allure-results/environment.properties', envDetails);
+
+    // =============================
+    // 🔹 EXECUTOR.JSON
+    // =============================
+    let executor: any;
+
+    if (process.env.BUILD_BUILDID) {
+      // Running in Azure Pipeline
+      executor = {
+        name: "Azure DevOps",
+        type: "azure-pipelines",
+        url: process.env.SYSTEM_TEAMFOUNDATIONCOLLECTIONURI || "",
+        buildOrder: process.env.BUILD_BUILDID,
+        buildName: process.env.BUILD_DEFINITIONNAME,
+        buildUrl: `${process.env.SYSTEM_TEAMFOUNDATIONCOLLECTIONURI}${process.env.SYSTEM_TEAMPROJECT}/_build/results?buildId=${process.env.BUILD_BUILDID}`,
+        reportUrl: "",
+        executor: process.env.BUILD_REQUESTEDFOR || "unknown"
+      };
+    } else {
+      // Running Locally
+      executor = {
+        name: "Local Execution",
+        type: "local",
+        url: "",
+        buildOrder: "local",
+        buildName: "LocalRun",
+        buildUrl: "",
+        reportUrl: "",
+        executor: os.userInfo().username
+      };
+    }
+
+    fs.writeFileSync('./allure-results/executor.json', JSON.stringify(executor, null, 2));
   },
 };
