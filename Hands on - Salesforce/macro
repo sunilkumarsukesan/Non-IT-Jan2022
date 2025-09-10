@@ -4,3 +4,30 @@ javascript:(function(){window._aicaptured=[];window._aiClickHandler=function(e){
 javascript:(function(){document.removeEventListener('click', window._aiClickHandler, true);alert("🛑 AI Inspect OFF.");})();
 
 javascript:(function(){if(!window._aicaptured||window._aicaptured.length===0){alert("⚠%EF%B8%8F No elements captured.");return}const t=JSON.stringify(window._aicaptured,null,2);console.log("✅ Copied captured elements:",t);navigator.clipboard.writeText(t).then(()=>{alert("📋 Copied to clipboard. Paste it in AI XL Monster!")});})();
+import fs from 'fs';
+
+export const config: WebdriverIO.Config = {
+  // ... your existing config ...
+
+  reporters: [
+    ['allure', {
+      outputDir: 'allure-results',
+      disableWebdriverStepsReporting: true,
+      disableWebdriverScreenshotsReporting: false,
+    }]
+  ],
+
+  onPrepare: function (config, capabilities) {
+    const envDetails =
+      `Environment=QA\n` +
+      `Browser=${capabilities[0].browserName}\n` +
+      `Platform=${process.platform}\n` +
+      `Node.Version=${process.version}\n`;
+
+    if (!fs.existsSync('./allure-results')) {
+      fs.mkdirSync('./allure-results');
+    }
+
+    fs.writeFileSync('./allure-results/environment.properties', envDetails);
+  },
+};
